@@ -1,3 +1,4 @@
+mod log;
 mod mount;
 
 use std::{env, path::PathBuf, process};
@@ -25,6 +26,14 @@ fn main() {
         .event_format(fmt::format().without_time().compact())
         .init();
 
+    if let Some(("log", _)) = matches.subcommand() {
+        if let Err(err) = log::view() {
+            error!("Failed to view log: {}", err);
+            process::exit(1);
+        }
+        return;
+    }
+
     match (
         matches.get_one::<PathBuf>("unmount"),
         matches.get_one::<PathBuf>("root_dir"),
@@ -40,7 +49,7 @@ fn main() {
                 mount_point.display()
             );
             if let Err(err) = mount(root_dir, mount_point) {
-                error!("Failed to mount: {err}");
+                error!("Failed to mount: {}", err);
                 process::exit(1);
             }
         }
@@ -55,16 +64,17 @@ fn build_command() -> Command {
     Command::new("vylfs")
         .version(env!("CARGO_PKG_VERSION"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
+        .subcommand(Command::new("log").about("Print the log from the last run if it exists"))
         .arg(
             Arg::new("root_dir")
-                .help("Sets the root directory for the encrypted storage")
+                .help("Set the root directory for the encrypted storage")
                 .value_parser(value_parser!(PathBuf))
                 .required(false)
                 .requires("mount_point"),
         )
         .arg(
             Arg::new("mount_point")
-                .help("Sets the mount point for the decrypted filesystem")
+                .help("Set the mount point for the decrypted filesystem")
                 .value_parser(value_parser!(PathBuf))
                 .required(false)
                 .requires("root_dir"),
