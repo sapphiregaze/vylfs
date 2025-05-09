@@ -22,11 +22,12 @@
         "x86_64-darwin"
         "aarch64-darwin"
       ];
+
       forEachSupportedSystem =
         f:
         nixpkgs.lib.genAttrs supportedSystems (
           system:
-          f {
+          let
             pkgs = import nixpkgs {
               inherit system;
               overlays = [
@@ -34,7 +35,22 @@
                 self.overlays.default
               ];
             };
-          }
+
+            mkScript = name: text: pkgs.writeShellScriptBin name text;
+
+            scripts = [
+              (mkScript "build" ''
+                echo "[build] Running cargo build..."
+                cargo build "$@"
+              '')
+              (mkScript "lint" ''
+                echo "[lint] Running cargo fmt and clippy..."
+                cargo fmt -- --check
+                cargo clippy --all-targets --all-features -- -D warnings
+              '')
+            ];
+          in
+          f { inherit pkgs scripts; }
         );
     in
     {
@@ -57,22 +73,24 @@
       };
 
       devShells = forEachSupportedSystem (
-        { pkgs }:
+        { pkgs, scripts }:
         {
           default = pkgs.mkShell {
-            packages = with pkgs; [
-              rustToolchain
-              openssl
-              pkg-config
-              cargo-deny
-              cargo-edit
-              cargo-watch
-              rust-analyzer
-              fuse3
-            ];
+            packages =
+              with pkgs;
+              [
+                rustToolchain
+                openssl
+                pkg-config
+                cargo-deny
+                cargo-edit
+                cargo-watch
+                rust-analyzer
+                fuse3
+              ]
+              ++ scripts;
 
             env = {
-              # Required by rust-analyzer
               RUST_SRC_PATH = "${pkgs.rustToolchain}/lib/rustlib/src/rust/library";
             };
           };

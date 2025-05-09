@@ -1,7 +1,12 @@
+mod mount;
+
 use std::{env, path::PathBuf, process};
 
 use clap::{value_parser, Arg, ArgAction, Command};
+use tracing::{error, info};
 use tracing_subscriber::{fmt, EnvFilter};
+
+use mount::mount;
 
 fn main() {
     let mut command = build_command();
@@ -26,17 +31,21 @@ fn main() {
         matches.get_one::<PathBuf>("mount_point"),
     ) {
         (Some(unmount_dir), _, _) => {
-            tracing::info!("Unmounting directory '{}'...", unmount_dir.display());
+            info!("Unmounting directory '{}'...", unmount_dir.display());
         }
         (None, Some(root_dir), Some(mount_point)) => {
-            tracing::info!(
+            info!(
                 "Mounting encrypted storage from '{}' to '{}'...",
                 root_dir.display(),
                 mount_point.display()
             );
+            if let Err(err) = mount(root_dir, mount_point) {
+                error!("Mount failed: {}", err);
+                process::exit(1);
+            }
         }
         _ => {
-            tracing::error!("Invalid combination of arguments. Use --help to see usage.");
+            error!("Invalid combination of arguments. Use --help to see usage.");
             process::exit(1);
         }
     }
@@ -67,7 +76,7 @@ fn build_command() -> Command {
                 .help("Unmount a specific mount point")
                 .value_parser(value_parser!(PathBuf))
                 .required(false)
-                .conflicts_with_all(&["root_dir", "mount_point"]),
+                .conflicts_with_all(["root_dir", "mount_point"]),
         )
         .arg(
             Arg::new("verbose")

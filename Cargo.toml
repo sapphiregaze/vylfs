@@ -5,6 +5,12 @@ authors = ["sapphiregaze"]
 description = "A Modern Encrypted Filesystem For FUSE That Conceals File Metadata"
 edition = "2021"
 
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = true
+strip = "debuginfo"
+
 [dependencies]
 clap = "4.5.37"
 fuser = "0.7"
