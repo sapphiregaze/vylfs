@@ -40,7 +40,7 @@ fn main() {
                 mount_point.display()
             );
             if let Err(err) = mount(root_dir, mount_point) {
-                error!("Mount failed: {}", err);
+                error!("Failed to mount: {err}");
                 process::exit(1);
             }
         }
