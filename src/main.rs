@@ -1,5 +1,5 @@
+mod filesystem;
 mod log;
-mod mount;
 
 use std::{env, path::PathBuf, process};
 
@@ -7,7 +7,7 @@ use clap::{value_parser, Arg, ArgAction, Command};
 use tracing::{error, info};
 use tracing_subscriber::{fmt, EnvFilter};
 
-use mount::mount;
+use filesystem::{mount::mount, unmount::unmount};
 
 fn main() {
     let mut command = build_command();
@@ -41,6 +41,10 @@ fn main() {
     ) {
         (Some(unmount_dir), _, _) => {
             info!("Unmounting directory '{}'...", unmount_dir.display());
+            if let Err(err) = unmount(unmount_dir) {
+                error!("Failed to unmount: {}", err);
+                process::exit(1);
+            }
         }
         (None, Some(root_dir), Some(mount_point)) => {
             info!(

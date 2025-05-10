@@ -15,5 +15,6 @@ strip = "debuginfo"
 clap = "4.5.37"
 daemonize = "0.5.0"
 fuser = "0.15.1"
+libc = "0.2.172"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
