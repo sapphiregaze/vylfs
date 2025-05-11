@@ -228,4 +228,26 @@ impl Filesystem for VylFs {
             reply.error(libc::ENOENT);
         }
     }
+
+    fn unlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: fuser::ReplyEmpty) {
+        let name_str = match name.to_str() {
+            Some(s) => s.to_string(),
+            None => {
+                reply.error(libc::EINVAL);
+                return;
+            }
+        };
+
+        let key = (parent, name_str.clone());
+
+        match self.entries.remove(&key) {
+            Some(ino) => {
+                self.inodes.remove(&ino);
+                reply.ok();
+            }
+            None => {
+                reply.error(libc::ENOENT);
+            }
+        }
+    }
 }
