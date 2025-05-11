@@ -1,5 +1,6 @@
 use std::{fs, io, path::PathBuf};
 
+/// Prints the `vylfs` log file from `/tmp/vylfs.out` if it exists.
 pub fn view() -> io::Result<()> {
     let log_path = PathBuf::from("/tmp/vylfs.out");
 

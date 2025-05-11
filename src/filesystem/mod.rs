@@ -1,3 +1,4 @@
+mod directory;
 mod inode;
 pub mod mount;
 pub mod unmount;

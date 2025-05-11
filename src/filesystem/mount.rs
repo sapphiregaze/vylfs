@@ -6,22 +6,13 @@ use daemonize::Daemonize;
 use fuser::{mount2, MountOption};
 use tracing::info;
 
+use crate::filesystem::directory::validate_dir;
 use crate::filesystem::VylFs;
 
+/// Mounts the encrypted filesystem in a background daemon process.
 pub fn mount(root_dir: &Path, mount_point: &Path) -> Result<(), Box<dyn Error>> {
-    if !root_dir.exists() {
-        return Err(format!("root directory '{}' does not exist", root_dir.display()).into());
-    }
-    if !root_dir.is_dir() {
-        return Err(format!("root path '{}' is not a directory", root_dir.display()).into());
-    }
-
-    if !mount_point.exists() {
-        return Err(format!("mount point '{}' does not exist", mount_point.display()).into());
-    }
-    if !mount_point.is_dir() {
-        return Err(format!("mount point '{}' is not a directory", mount_point.display()).into());
-    }
+    validate_dir(root_dir)?;
+    validate_dir(mount_point)?;
 
     let stdout = File::create("/tmp/vylfs.out")?;
     let stderr = File::create("/tmp/vylfs.err")?;
