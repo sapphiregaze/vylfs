@@ -87,7 +87,7 @@ fn build_command() -> Command {
             Arg::new("unmount")
                 .short('u')
                 .long("unmount")
-                .help("Unmount a specific mount point")
+                .help("Unmount a specific mount point (requires root)")
                 .value_parser(value_parser!(PathBuf))
                 .required(false)
                 .conflicts_with_all(["root_dir", "mount_point"]),
