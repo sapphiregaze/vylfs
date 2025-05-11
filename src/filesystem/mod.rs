@@ -3,29 +3,30 @@ pub mod mount;
 pub mod unmount;
 
 use std::{
+    collections::HashMap,
     ffi::OsStr,
-    path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
 
 use fuser::{
-    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyDirectory, ReplyEntry, Request,
-    FUSE_ROOT_ID,
+    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyDirectory,
+    ReplyEntry, Request, FUSE_ROOT_ID,
 };
 use libc::{getegid, geteuid};
 use tracing::info;
 
 pub struct VylFs {
     ttl: Duration,
-    root_attr: FileAttr,
-    _root_path: PathBuf,
+    inode_counter: u64,
+    inodes: HashMap<u64, FileAttr>,
+    entries: HashMap<(u64, String), u64>,
 }
 
 impl VylFs {
-    pub fn new(mount_point: &Path) -> Self {
+    pub fn new() -> Self {
         let uid = unsafe { geteuid() };
         let gid = unsafe { getegid() };
-
+        let ttl = Duration::from_secs(1);
         let root_attr: FileAttr = FileAttr {
             ino: FUSE_ROOT_ID,
             size: 4096,
@@ -44,11 +45,21 @@ impl VylFs {
             flags: 0,
         };
 
-        Self {
-            ttl: Duration::from_secs(1),
-            root_attr,
-            _root_path: mount_point.to_path_buf(),
-        }
+        let mut fs = Self {
+            ttl,
+            inode_counter: FUSE_ROOT_ID + 1,
+            inodes: HashMap::new(),
+            entries: HashMap::new(),
+        };
+
+        fs.inodes.insert(FUSE_ROOT_ID, root_attr);
+        fs
+    }
+
+    pub fn add_entry(&mut self, parent: u64, name: &str, attr: FileAttr) {
+        let ino = attr.ino;
+        self.inodes.insert(ino, attr);
+        self.entries.insert((parent, name.to_string()), ino);
     }
 }
 
@@ -62,14 +73,31 @@ impl Filesystem for VylFs {
         info!("Filesystem destroyed");
     }
 
-    fn lookup(&mut self, _req: &Request<'_>, _parent: u64, _name: &OsStr, _reply: ReplyEntry) {
-        info!("Lookup called");
+    fn lookup(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEntry) {
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(libc::EINVAL);
+                return;
+            }
+        };
+
+        match self.entries.get(&(parent, name_str.to_string())) {
+            Some(&child_ino) => {
+                if let Some(attr) = self.inodes.get(&child_ino) {
+                    reply.entry(&self.ttl, attr, 0);
+                } else {
+                    reply.error(libc::ENOENT);
+                }
+            }
+            None => reply.error(libc::ENOENT),
+        }
     }
 
     fn getattr(&mut self, _req: &Request<'_>, ino: u64, _fh: Option<u64>, reply: ReplyAttr) {
-        match ino {
-            FUSE_ROOT_ID => reply.attr(&self.ttl, &self.root_attr),
-            _ => reply.error(libc::ENOENT),
+        match self.inodes.get(&ino) {
+            Some(attr) => reply.attr(&self.ttl, attr),
+            None => reply.error(libc::ENOENT),
         }
     }
 
@@ -86,18 +114,118 @@ impl Filesystem for VylFs {
             return;
         }
 
-        let entries = vec![
-            (FUSE_ROOT_ID, FileType::Directory, "."),
-            (FUSE_ROOT_ID, FileType::Directory, ".."),
+        let mut entries = vec![
+            (FUSE_ROOT_ID, FileType::Directory, ".".to_string()),
+            (FUSE_ROOT_ID, FileType::Directory, "..".to_string()),
         ];
 
-        for (i, (inode, kind, name)) in entries.into_iter().enumerate().skip(offset as usize) {
-            let offset = (i + 1) as i64;
-            if reply.add(inode, offset, kind, name) {
+        for ((parent, name), &child_ino) in &self.entries {
+            if *parent == ino {
+                if let Some(attr) = self.inodes.get(&child_ino) {
+                    entries.push((attr.ino, attr.kind, name.clone()));
+                }
+            }
+        }
+
+        for (i, (child_ino, file_type, name)) in
+            entries.into_iter().enumerate().skip(offset as usize)
+        {
+            let full = reply.add(child_ino, (i + 1) as i64, file_type, name);
+            if full {
                 break;
             }
         }
 
         reply.ok();
+    }
+
+    fn create(
+        &mut self,
+        _req: &Request<'_>,
+        parent: u64,
+        name: &OsStr,
+        mode: u32,
+        _umask: u32,
+        _flags: i32,
+        reply: ReplyCreate,
+    ) {
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(libc::EINVAL);
+                return;
+            }
+        };
+
+        if self.entries.contains_key(&(parent, name_str.to_string())) {
+            reply.error(libc::EEXIST);
+            return;
+        }
+
+        let ino = self.inode_counter;
+        self.inode_counter += 1;
+
+        let uid = unsafe { geteuid() };
+        let gid = unsafe { getegid() };
+        let attr = FileAttr {
+            ino,
+            size: 0,
+            blocks: 0,
+            atime: SystemTime::now(),
+            mtime: SystemTime::now(),
+            ctime: SystemTime::now(),
+            crtime: SystemTime::now(),
+            kind: FileType::RegularFile,
+            perm: (mode & 0o7777) as u16,
+            nlink: 1,
+            uid,
+            gid,
+            rdev: 0,
+            blksize: 4096,
+            flags: 0,
+        };
+
+        self.add_entry(parent, name_str, attr);
+
+        reply.created(&self.ttl, &attr, 0, 0, 0);
+    }
+
+    fn setattr(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        _mode: Option<u32>,
+        _uid: Option<u32>,
+        _gid: Option<u32>,
+        _size: Option<u64>,
+        atime: Option<fuser::TimeOrNow>,
+        mtime: Option<fuser::TimeOrNow>,
+        _ctime: Option<SystemTime>,
+        _fh: Option<u64>,
+        _crtime: Option<SystemTime>,
+        _chgtime: Option<SystemTime>,
+        _bkuptime: Option<SystemTime>,
+        _flags: Option<u32>,
+        reply: fuser::ReplyAttr,
+    ) {
+        if let Some(attr) = self.inodes.get_mut(&ino) {
+            if let Some(a) = atime {
+                attr.atime = match a {
+                    fuser::TimeOrNow::SpecificTime(t) => t,
+                    fuser::TimeOrNow::Now => SystemTime::now(),
+                };
+            }
+
+            if let Some(m) = mtime {
+                attr.mtime = match m {
+                    fuser::TimeOrNow::SpecificTime(t) => t,
+                    fuser::TimeOrNow::Now => SystemTime::now(),
+                };
+            }
+
+            reply.attr(&self.ttl, attr);
+        } else {
+            reply.error(libc::ENOENT);
+        }
     }
 }

@@ -30,7 +30,7 @@ pub fn mount(root_dir: &Path, mount_point: &Path) -> Result<(), Box<dyn Error>> 
         MountOption::AllowRoot,
     ];
 
-    let fs = VylFs::new(mount_point);
+    let fs = VylFs::new();
     mount2(fs, mount_point, &options)?;
     info!("Unmounted '{}' and exiting daemon", mount_point.display());
 
