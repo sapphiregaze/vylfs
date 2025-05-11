@@ -16,4 +16,3 @@ pub fn validate_dir(path: &Path) -> io::Result<()> {
     }
     Ok(())
 }
-
