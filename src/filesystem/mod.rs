@@ -20,7 +20,7 @@ pub struct VylFs {
     inode_counter: u64,
     inodes: HashMap<u64, FileAttr>,
     entries: HashMap<(u64, String), u64>,
-    data: HashMap<u64, Vec<u8>>,
+    file_data: HashMap<u64, Vec<u8>>,
 }
 
 impl VylFs {
@@ -51,7 +51,7 @@ impl VylFs {
             inode_counter: FUSE_ROOT_ID + 1,
             inodes: HashMap::new(),
             entries: HashMap::new(),
-            data: HashMap::new(),
+            file_data: HashMap::new(),
         };
 
         fs.inodes.insert(FUSE_ROOT_ID, root_attr);
@@ -111,14 +111,30 @@ impl Filesystem for VylFs {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
-        if ino != FUSE_ROOT_ID {
+        let Some(dir_attr) = self.inodes.get(&ino) else {
             reply.error(libc::ENOENT);
+            return;
+        };
+
+        if dir_attr.kind != FileType::Directory {
+            reply.error(libc::ENOTDIR);
             return;
         }
 
+        let parent_ino = if ino == FUSE_ROOT_ID {
+            FUSE_ROOT_ID
+        } else {
+            self.entries
+                .iter()
+                .find_map(
+                    |((parent, _name), &child)| if child == ino { Some(*parent) } else { None },
+                )
+                .unwrap_or(FUSE_ROOT_ID)
+        };
+
         let mut entries = vec![
-            (FUSE_ROOT_ID, FileType::Directory, ".".to_string()),
-            (FUSE_ROOT_ID, FileType::Directory, "..".to_string()),
+            (ino, FileType::Directory, ".".to_string()),
+            (parent_ino, FileType::Directory, "..".to_string()),
         ];
 
         for ((parent, name), &child_ino) in &self.entries {
@@ -188,7 +204,7 @@ impl Filesystem for VylFs {
         };
 
         self.add_entry(parent, name_str, attr);
-        self.data.insert(ino, Vec::new());
+        self.file_data.insert(ino, Vec::new());
 
         reply.created(&self.ttl, &attr, 0, 0, 0);
     }
@@ -265,7 +281,7 @@ impl Filesystem for VylFs {
         _lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
-        if let Some(content) = self.data.get(&ino) {
+        if let Some(content) = self.file_data.get(&ino) {
             let start = offset as usize;
             let end = (offset as usize + size as usize).min(content.len());
 
@@ -291,7 +307,7 @@ impl Filesystem for VylFs {
         _lock_owner: Option<u64>,
         reply: ReplyWrite,
     ) {
-        if let Some(buffer) = self.data.get_mut(&ino) {
+        if let Some(buffer) = self.file_data.get_mut(&ino) {
             let offset = offset as usize;
             let end = offset + data.len();
 
@@ -303,6 +319,11 @@ impl Filesystem for VylFs {
 
             if let Some(attr) = self.inodes.get_mut(&ino) {
                 attr.size = buffer.len() as u64;
+                attr.blocks = if attr.size == 0 {
+                    0
+                } else {
+                    std::cmp::max(8, (attr.size + 511) / 512)
+                };
                 attr.mtime = SystemTime::now();
             }
 
@@ -310,5 +331,89 @@ impl Filesystem for VylFs {
         } else {
             reply.error(libc::ENOENT);
         }
+    }
+
+    fn mkdir(
+        &mut self,
+        _req: &Request<'_>,
+        parent: u64,
+        name: &OsStr,
+        mode: u32,
+        _umask: u32,
+        reply: ReplyEntry,
+    ) {
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => {
+                reply.error(libc::EINVAL);
+                return;
+            }
+        };
+
+        if self.entries.contains_key(&(parent, name_str.to_string())) {
+            reply.error(libc::EEXIST);
+            return;
+        }
+
+        let ino = self.inode_counter;
+        self.inode_counter += 1;
+
+        let uid = unsafe { geteuid() };
+        let gid = unsafe { getegid() };
+        let attr = FileAttr {
+            ino,
+            size: 4096,
+            blocks: 8,
+            atime: SystemTime::now(),
+            mtime: SystemTime::now(),
+            ctime: SystemTime::now(),
+            crtime: SystemTime::now(),
+            kind: FileType::Directory,
+            perm: (mode & 0o7777) as u16,
+            nlink: 2,
+            uid,
+            gid,
+            rdev: 0,
+            blksize: 4096,
+            flags: 0,
+        };
+
+        self.add_entry(parent, name_str, attr);
+        reply.entry(&self.ttl, &attr, 0);
+    }
+
+    fn rmdir(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
+        let name_str = match name.to_str() {
+            Some(s) => s.to_string(),
+            None => {
+                reply.error(libc::EINVAL);
+                return;
+            }
+        };
+
+        let key = (parent, name_str.clone());
+        let Some(&ino) = self.entries.get(&key) else {
+            reply.error(libc::ENOENT);
+            return;
+        };
+
+        let Some(attr) = self.inodes.get(&ino) else {
+            reply.error(libc::ENOENT);
+            return;
+        };
+
+        if attr.kind != FileType::Directory {
+            reply.error(libc::ENOTDIR);
+            return;
+        }
+
+        if self.entries.keys().any(|(p, _)| *p == ino) {
+            reply.error(libc::ENOTEMPTY);
+            return;
+        }
+
+        self.entries.remove(&key);
+        self.inodes.remove(&ino);
+        reply.ok();
     }
 }
