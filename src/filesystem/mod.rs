@@ -9,8 +9,8 @@ use std::{
 };
 
 use fuser::{
-    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyDirectory,
-    ReplyEntry, Request, FUSE_ROOT_ID,
+    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyData,
+    ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyWrite, Request, FUSE_ROOT_ID,
 };
 use libc::{getegid, geteuid};
 use tracing::info;
@@ -20,6 +20,7 @@ pub struct VylFs {
     inode_counter: u64,
     inodes: HashMap<u64, FileAttr>,
     entries: HashMap<(u64, String), u64>,
+    data: HashMap<u64, Vec<u8>>,
 }
 
 impl VylFs {
@@ -50,6 +51,7 @@ impl VylFs {
             inode_counter: FUSE_ROOT_ID + 1,
             inodes: HashMap::new(),
             entries: HashMap::new(),
+            data: HashMap::new(),
         };
 
         fs.inodes.insert(FUSE_ROOT_ID, root_attr);
@@ -186,6 +188,7 @@ impl Filesystem for VylFs {
         };
 
         self.add_entry(parent, name_str, attr);
+        self.data.insert(ino, Vec::new());
 
         reply.created(&self.ttl, &attr, 0, 0, 0);
     }
@@ -206,7 +209,7 @@ impl Filesystem for VylFs {
         _chgtime: Option<SystemTime>,
         _bkuptime: Option<SystemTime>,
         _flags: Option<u32>,
-        reply: fuser::ReplyAttr,
+        reply: ReplyAttr,
     ) {
         if let Some(attr) = self.inodes.get_mut(&ino) {
             if let Some(a) = atime {
@@ -229,7 +232,7 @@ impl Filesystem for VylFs {
         }
     }
 
-    fn unlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: fuser::ReplyEmpty) {
+    fn unlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let name_str = match name.to_str() {
             Some(s) => s.to_string(),
             None => {
@@ -248,6 +251,64 @@ impl Filesystem for VylFs {
             None => {
                 reply.error(libc::ENOENT);
             }
+        }
+    }
+
+    fn read(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        _fh: u64,
+        offset: i64,
+        size: u32,
+        _flags: i32,
+        _lock_owner: Option<u64>,
+        reply: ReplyData,
+    ) {
+        if let Some(content) = self.data.get(&ino) {
+            let start = offset as usize;
+            let end = (offset as usize + size as usize).min(content.len());
+
+            if start > content.len() {
+                reply.data(&[]);
+            } else {
+                reply.data(&content[start..end]);
+            }
+        } else {
+            reply.error(libc::ENOENT);
+        }
+    }
+
+    fn write(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        _fh: u64,
+        offset: i64,
+        data: &[u8],
+        _write_flags: u32,
+        _flags: i32,
+        _lock_owner: Option<u64>,
+        reply: ReplyWrite,
+    ) {
+        if let Some(buffer) = self.data.get_mut(&ino) {
+            let offset = offset as usize;
+            let end = offset + data.len();
+
+            if buffer.len() < end {
+                buffer.resize(end, 0);
+            }
+
+            buffer[offset..end].copy_from_slice(data);
+
+            if let Some(attr) = self.inodes.get_mut(&ino) {
+                attr.size = buffer.len() as u64;
+                attr.mtime = SystemTime::now();
+            }
+
+            reply.written(data.len() as u32);
+        } else {
+            reply.error(libc::ENOENT);
         }
     }
 }
