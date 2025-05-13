@@ -42,11 +42,24 @@
               (mkScript "build" ''
                 echo "[build] Running cargo build..."
                 cargo build "$@"
+                if [[ "$*" == *"--release"* ]]; then
+                  profile="release"
+                elif [[ "$*" == *"--profile="* ]]; then
+                  profile=$(echo "$*" | sed -n 's/.*--profile=\([^[:space:]]*\).*/\1/p')
+                else
+                  profile="debug"
+                fi
+                binary_path="target/$profile/vylfs"
+                echo "[build] Patching dynamic linker of ELF binary..."
+                patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 "$binary_path"
+                echo "[build] Done."
               '')
               (mkScript "lint" ''
-                echo "[lint] Running cargo fmt and clippy..."
+                echo "[lint] Running cargo fmt..."
                 cargo fmt -- --check
+                echo "[lint] Running cargo clippy..."
                 cargo clippy --all-targets --all-features -- -D warnings
+                echo "[lint] Done."
               '')
             ];
           in
@@ -87,6 +100,7 @@
                 cargo-watch
                 rust-analyzer
                 fuse3
+                patchelf
               ]
               ++ scripts;
 

@@ -46,22 +46,24 @@ impl VylFs {
             flags: 0,
         };
 
-        let mut fs = Self {
+        Self {
             ttl,
             inode_counter: FUSE_ROOT_ID + 1,
-            inodes: HashMap::new(),
+            inodes: HashMap::from([(FUSE_ROOT_ID, root_attr)]),
             entries: HashMap::new(),
             file_data: HashMap::new(),
-        };
-
-        fs.inodes.insert(FUSE_ROOT_ID, root_attr);
-        fs
+        }
     }
 
     pub fn add_entry(&mut self, parent: u64, name: &str, attr: FileAttr) {
         let ino = attr.ino;
         self.inodes.insert(ino, attr);
         self.entries.insert((parent, name.to_string()), ino);
+    }
+
+    pub fn remove_entry(&mut self, ino: &u64, key: &(u64, String)) {
+        self.inodes.remove(ino);
+        self.entries.remove(key);
     }
 }
 
@@ -140,7 +142,7 @@ impl Filesystem for VylFs {
         for ((parent, name), &child_ino) in &self.entries {
             if *parent == ino {
                 if let Some(attr) = self.inodes.get(&child_ino) {
-                    entries.push((attr.ino, attr.kind, name.clone()));
+                    entries.push((attr.ino, attr.kind, name.to_string()));
                 }
             }
         }
@@ -250,15 +252,14 @@ impl Filesystem for VylFs {
 
     fn unlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let name_str = match name.to_str() {
-            Some(s) => s.to_string(),
+            Some(s) => s,
             None => {
                 reply.error(libc::EINVAL);
                 return;
             }
         };
 
-        let key = (parent, name_str.clone());
-
+        let key = (parent, name_str.to_string());
         match self.entries.remove(&key) {
             Some(ino) => {
                 self.inodes.remove(&ino);
@@ -384,14 +385,14 @@ impl Filesystem for VylFs {
 
     fn rmdir(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let name_str = match name.to_str() {
-            Some(s) => s.to_string(),
+            Some(s) => s,
             None => {
                 reply.error(libc::EINVAL);
                 return;
             }
         };
 
-        let key = (parent, name_str.clone());
+        let key = (parent, name_str.to_string());
         let Some(&ino) = self.entries.get(&key) else {
             reply.error(libc::ENOENT);
             return;
@@ -412,8 +413,7 @@ impl Filesystem for VylFs {
             return;
         }
 
-        self.entries.remove(&key);
-        self.inodes.remove(&ino);
+        self.remove_entry(&ino, &key);
         reply.ok();
     }
 }
