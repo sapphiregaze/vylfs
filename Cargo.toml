@@ -3,7 +3,7 @@ name = "vylfs"
 version = "0.1.0"
 authors = ["sapphiregaze"]
 description = "A Modern Encrypted Virtual Filesystem That Conceals Metadata"
-edition = "2021"
+edition = "2024"
 
 [profile.release]
 opt-level = 3

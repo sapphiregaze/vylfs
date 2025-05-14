@@ -3,9 +3,9 @@ mod log;
 
 use std::{env, path::PathBuf, process};
 
-use clap::{value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use tracing::{error, info};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use filesystem::{mount::mount, unmount::unmount};
 

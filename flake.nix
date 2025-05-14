@@ -98,6 +98,7 @@
                 cargo-deny
                 cargo-edit
                 cargo-watch
+                cargo-udeps
                 rust-analyzer
                 fuse3
                 patchelf

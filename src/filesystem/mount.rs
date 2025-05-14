@@ -3,11 +3,11 @@ use std::fs::File;
 use std::path::Path;
 
 use daemonize::Daemonize;
-use fuser::{mount2, MountOption};
+use fuser::{MountOption, mount2};
 use tracing::info;
 
-use crate::filesystem::directory::validate_dir;
 use crate::filesystem::VylFs;
+use crate::filesystem::directory::validate_dir;
 
 /// Mounts the encrypted filesystem in a background daemon process.
 pub fn mount(root_dir: &Path, mount_point: &Path) -> Result<(), Box<dyn Error>> {

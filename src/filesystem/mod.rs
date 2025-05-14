@@ -9,8 +9,8 @@ use std::{
 };
 
 use fuser::{
-    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyData,
-    ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyWrite, Request, FUSE_ROOT_ID,
+    FUSE_ROOT_ID, FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyData,
+    ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyWrite, Request,
 };
 use libc::{getegid, geteuid};
 use tracing::info;
@@ -323,7 +323,7 @@ impl Filesystem for VylFs {
                 attr.blocks = if attr.size == 0 {
                     0
                 } else {
-                    std::cmp::max(8, (attr.size + 511) / 512)
+                    std::cmp::max(8, attr.size.div_ceil(512))
                 };
                 attr.mtime = SystemTime::now();
             }

@@ -1,6 +1,6 @@
 use std::{ffi::CString, io, path::Path};
 
-use libc::{geteuid, umount2, MNT_FORCE};
+use libc::{MNT_FORCE, geteuid, umount2};
 
 use crate::filesystem::directory::validate_dir;
 
