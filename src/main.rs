@@ -1,13 +1,20 @@
 mod filesystem;
 mod log;
 
-use std::{env, path::PathBuf, process};
+use std::env;
+use std::path::PathBuf;
+use std::process;
 
-use clap::{Arg, ArgAction, Command, value_parser};
-use tracing::{error, info};
-use tracing_subscriber::{EnvFilter, fmt};
-
-use filesystem::{mount::mount, unmount::unmount};
+use clap::Arg;
+use clap::ArgAction;
+use clap::Command;
+use clap::value_parser;
+use filesystem::mount::mount;
+use filesystem::unmount::unmount;
+use tracing::error;
+use tracing::info;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt;
 
 fn main() {
     let mut command = build_command();

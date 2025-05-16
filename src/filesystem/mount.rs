@@ -3,7 +3,8 @@ use std::fs::File;
 use std::path::Path;
 
 use daemonize::Daemonize;
-use fuser::{MountOption, mount2};
+use fuser::MountOption;
+use fuser::mount2;
 use tracing::info;
 
 use crate::filesystem::VylFs;

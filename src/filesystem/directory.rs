@@ -1,4 +1,5 @@
-use std::{io, path::Path};
+use std::io;
+use std::path::Path;
 
 /// Ensures the given path exists and is a directory.
 pub fn validate_dir(path: &Path) -> io::Result<()> {

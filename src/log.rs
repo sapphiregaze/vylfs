@@ -1,4 +1,6 @@
-use std::{fs, io, path::PathBuf};
+use std::fs;
+use std::io;
+use std::path::PathBuf;
 
 /// Prints the `vylfs` log file from `/tmp/vylfs.out` if it exists.
 pub fn view() -> io::Result<()> {

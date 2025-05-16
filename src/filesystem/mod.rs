@@ -2,17 +2,26 @@ mod directory;
 pub mod mount;
 pub mod unmount;
 
-use std::{
-    collections::HashMap,
-    ffi::OsStr,
-    time::{Duration, SystemTime},
-};
+use std::collections::HashMap;
+use std::ffi::OsStr;
+use std::time::Duration;
+use std::time::SystemTime;
 
-use fuser::{
-    FUSE_ROOT_ID, FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyData,
-    ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyWrite, Request,
-};
-use libc::{getegid, geteuid};
+use fuser::FUSE_ROOT_ID;
+use fuser::FileAttr;
+use fuser::FileType;
+use fuser::Filesystem;
+use fuser::KernelConfig;
+use fuser::ReplyAttr;
+use fuser::ReplyCreate;
+use fuser::ReplyData;
+use fuser::ReplyDirectory;
+use fuser::ReplyEmpty;
+use fuser::ReplyEntry;
+use fuser::ReplyWrite;
+use fuser::Request;
+use libc::getegid;
+use libc::geteuid;
 use tracing::info;
 
 pub struct VylFs {
@@ -215,21 +224,38 @@ impl Filesystem for VylFs {
         &mut self,
         _req: &Request<'_>,
         ino: u64,
-        _mode: Option<u32>,
-        _uid: Option<u32>,
-        _gid: Option<u32>,
-        _size: Option<u64>,
+        mode: Option<u32>,
+        uid: Option<u32>,
+        gid: Option<u32>,
+        size: Option<u64>,
         atime: Option<fuser::TimeOrNow>,
         mtime: Option<fuser::TimeOrNow>,
         _ctime: Option<SystemTime>,
         _fh: Option<u64>,
-        _crtime: Option<SystemTime>,
-        _chgtime: Option<SystemTime>,
+        crtime: Option<SystemTime>,
+        chgtime: Option<SystemTime>,
         _bkuptime: Option<SystemTime>,
-        _flags: Option<u32>,
+        flags: Option<u32>,
         reply: ReplyAttr,
     ) {
         if let Some(attr) = self.inodes.get_mut(&ino) {
+            if let Some(new_mode) = mode {
+                attr.perm = new_mode as u16;
+            }
+
+            if let Some(new_uid) = uid {
+                attr.uid = new_uid;
+            }
+
+            if let Some(new_gid) = gid {
+                attr.gid = new_gid;
+            }
+
+            if let Some(new_size) = size {
+                attr.size = new_size;
+                attr.blocks = new_size.div_ceil(attr.blksize as u64);
+            }
+
             if let Some(a) = atime {
                 attr.atime = match a {
                     fuser::TimeOrNow::SpecificTime(t) => t,
@@ -242,6 +268,18 @@ impl Filesystem for VylFs {
                     fuser::TimeOrNow::SpecificTime(t) => t,
                     fuser::TimeOrNow::Now => SystemTime::now(),
                 };
+            }
+
+            if let Some(c) = crtime {
+                attr.crtime = c;
+            }
+
+            if let Some(c) = chgtime {
+                attr.ctime = c;
+            }
+
+            if let Some(f) = flags {
+                attr.flags = f;
             }
 
             reply.attr(&self.ttl, attr);
