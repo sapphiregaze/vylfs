@@ -110,6 +110,7 @@
             env = {
               RUST_SRC_PATH = "${pkgs.rustToolchain}/lib/rustlib/src/rust/library";
               MOLD_PATH = "${pkgs.mold}/bin/mold";
+              FUSE3_LIB_PATH = "${pkgs.fuse3.out}/lib";
             };
           };
         }

@@ -1,3 +1,6 @@
 [target.'cfg(target_os = "linux")']
 linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=/nix/store/qbnal1iiw0g9r5r8c9kldmqm1pk42qxc-mold-2.39.0/bin/mold"]
+rustflags = [
+  "-C", "link-arg=-fuse-ld=/nix/store/qbnal1iiw0g9r5r8c9kldmqm1pk42qxc-mold-2.39.0/bin/mold",
+  "-C", "link-arg=-Wl,-rpath,/nix/store/90l74wy9iryihvxbvprpi53kia9qrww5-fuse-3.16.2/lib"
+]
