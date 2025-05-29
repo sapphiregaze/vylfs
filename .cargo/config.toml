@@ -1,0 +1,3 @@
+[target.'cfg(target_os = "linux")']
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=/nix/store/qbnal1iiw0g9r5r8c9kldmqm1pk42qxc-mold-2.39.0/bin/mold"]

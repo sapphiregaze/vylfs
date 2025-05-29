@@ -24,6 +24,7 @@ use libc::getegid;
 use libc::geteuid;
 use tracing::info;
 
+#[derive(Debug)]
 pub struct VylFs {
     ttl: Duration,
     inode_counter: u64,
@@ -33,7 +34,20 @@ pub struct VylFs {
 }
 
 impl VylFs {
-    pub fn new() -> Self {
+    pub fn add_entry(&mut self, parent: u64, name: &str, attr: FileAttr) {
+        let ino = attr.ino;
+        self.inodes.insert(ino, attr);
+        self.entries.insert((parent, name.to_string()), ino);
+    }
+
+    pub fn remove_entry(&mut self, ino: &u64, key: &(u64, String)) {
+        self.inodes.remove(ino);
+        self.entries.remove(key);
+    }
+}
+
+impl Default for VylFs {
+    fn default() -> Self {
         let uid = unsafe { geteuid() };
         let gid = unsafe { getegid() };
         let ttl = Duration::from_secs(1);
@@ -62,17 +76,6 @@ impl VylFs {
             entries: HashMap::new(),
             file_data: HashMap::new(),
         }
-    }
-
-    pub fn add_entry(&mut self, parent: u64, name: &str, attr: FileAttr) {
-        let ino = attr.ino;
-        self.inodes.insert(ino, attr);
-        self.entries.insert((parent, name.to_string()), ino);
-    }
-
-    pub fn remove_entry(&mut self, ino: &u64, key: &(u64, String)) {
-        self.inodes.remove(ino);
-        self.entries.remove(key);
     }
 }
 

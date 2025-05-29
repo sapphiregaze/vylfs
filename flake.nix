@@ -102,11 +102,14 @@
                 rust-analyzer
                 fuse3
                 patchelf
+                mold
+                clang
               ]
               ++ scripts;
 
             env = {
               RUST_SRC_PATH = "${pkgs.rustToolchain}/lib/rustlib/src/rust/library";
+              MOLD_PATH = "${pkgs.mold}/bin/mold";
             };
           };
         }
